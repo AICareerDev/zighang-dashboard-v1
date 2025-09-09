@@ -84,8 +84,8 @@ function TimeSeriesChart() {
         },
         ticks: {
           color: 'white',
-          callback: function(value: any) {
-            return value.toLocaleString(); // 천 단위 쉼표 추가
+          callback: function(value: string | number) {
+            return Number(value).toLocaleString(); // 천 단위 쉼표 추가
           }
         },
       },
