@@ -1,5 +1,5 @@
-export default function Home() {
-  return (
+export default function ApplyOverviewPage() {
+return (
     <main
       style={{
         minHeight: "100vh",
@@ -33,5 +33,5 @@ export default function Home() {
         </section>
       </div>
     </main>
-  );
+  )
 }
