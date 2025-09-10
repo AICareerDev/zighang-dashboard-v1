@@ -10,6 +10,7 @@ import {
   Title,
   Tooltip,
   Legend,
+  Filler,
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 
@@ -21,7 +22,8 @@ ChartJS.register(
   LineElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
+  Filler
 );
 
 /**
@@ -192,35 +194,140 @@ export function ApplyDetailComponent() {
   );
 }
 
+// 캐시 관리
+let cachedData: { days: number; dateText: string; timestamp: number } | null = null;
+const CACHE_DURATION = 60 * 60 * 1000; // 1시간
+
 /**
- * 생명시간 카운트다운 - 목표 날짜까지 남은 일수를 계산해서 보여줌
+ * 주차를 해당 주차의 마지막 날짜로 변환
+ * 예: "2026년 5월 3주차" → "2026년 5월 21일"
+ */
+function convertWeekToEndDate(weekText: string): string {
+  const match = weekText.match(/(\d{4})년 (\d{1,2})월 (\d{1,2})주차/);
+  if (!match) return weekText;
+
+  const year = parseInt(match[1]);
+  const month = parseInt(match[2]);
+  const week = parseInt(match[3]);
+
+  // 해당 월의 첫 번째 날
+  const firstDay = new Date(year, month - 1, 1);
+  
+  // 첫 번째 주의 시작일 (월요일 기준)
+  const firstMonday = new Date(firstDay);
+  const dayOfWeek = firstDay.getDay();
+  const daysToMonday = dayOfWeek === 0 ? 1 : 8 - dayOfWeek; // 일요일이면 1일, 아니면 8-요일
+  firstMonday.setDate(firstDay.getDate() + daysToMonday);
+
+  // 해당 주차의 마지막 날 (일요일)
+  const targetWeekEnd = new Date(firstMonday);
+  targetWeekEnd.setDate(firstMonday.getDate() + (week - 1) * 7 + 6);
+
+  return `${targetWeekEnd.getFullYear()}년 ${targetWeekEnd.getMonth() + 1}월 ${targetWeekEnd.getDate()}일`;
+}
+
+/**
+ * 생명시간 카운트다운 - API에서 실제 데이터를 가져와서 보여줌 (캐시 적용)
  */
 export function LifeTimeComponent() {
-  // 목표 종료 날짜 (수정 가능)
-  const targetEndDate = new Date("2026-07-29T00:00:00");
-  
-  // 오늘 날짜 (시분초 제거하고 날짜만)
-  const today = new Date();
-  const todayOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  
-  // 하루를 밀리초로 환산 (24시간 × 60분 × 60초 × 1000밀리초)
-  const millisecondsPerDay = 1000 * 60 * 60 * 24;
-  
-  // 남은 일수 계산 (음수가 나오면 0으로 처리)
-  const remainingDays = Math.max(0, Math.ceil((targetEndDate.getTime() - todayOnly.getTime()) / millisecondsPerDay));
-  
-  // 목표 날짜를 년/월/일로 분리
-  const targetYear = targetEndDate.getFullYear();
-  const targetMonth = targetEndDate.getMonth() + 1; // JavaScript는 0부터 시작하므로 +1
-  const targetDay = targetEndDate.getDate();
+  const [remainingDays, setRemainingDays] = React.useState<number>(247); // 기본값 설정
+  const [targetDateText, setTargetDateText] = React.useState<string>("2026년 5월 21일에 끝납니다."); // 기본값 설정
+
+  React.useEffect(() => {
+    const fetchData = async () => {
+      // 캐시 확인
+      const now = Date.now();
+      if (cachedData && (now - cachedData.timestamp) < CACHE_DURATION) {
+        console.log('캐시된 데이터 사용');
+        setRemainingDays(cachedData.days);
+        setTargetDateText(cachedData.dateText);
+        return;
+      }
+
+      try {
+        console.log('API 호출 시작...');
+        
+        // 타임아웃 설정 (15초, 리다이렉트 허용)
+        const fetchWithTimeout = (url: string) => {
+          return Promise.race([
+            fetch(url, {
+              method: 'GET',
+              redirect: 'follow',
+              headers: { 'Accept': 'application/json' }
+            }),
+            new Promise<never>((_, reject) => 
+              setTimeout(() => reject(new Error('타임아웃')), 15000)
+            )
+          ]);
+        };
+
+        // 두 API를 동시에 호출
+        const [daysResponse, dateResponse] = await Promise.all([
+          fetchWithTimeout('https://script.google.com/macros/s/AKfycbzMmyQR0J0cf57U21XbUIsFUuGSR-K3euip9fIFXpiDjTfegHIP6geTmEO134XAC8Qc/exec'),
+          fetchWithTimeout('https://script.google.com/macros/s/AKfycbxq9Uy5BFq3UxnVSMrU5ZLP9mJLX9XRLK_h2R2CEUSA9DvaksJ9MX6hebbRbWeoWnqG/exec')
+        ]);
+
+        console.log('API 응답 상태:', daysResponse.status, dateResponse.status);
+
+        if (!daysResponse.ok || !dateResponse.ok) {
+          throw new Error('API 응답 오류');
+        }
+
+        const daysData = await daysResponse.json();
+        const dateData = await dateResponse.json();
+
+        console.log('받은 데이터:', { daysData, dateData });
+
+        let newDays = 247;
+        let newDateText = "2026년 5월 21일에 끝납니다.";
+
+        // API 응답에서 값 추출
+        if (daysData.metric === "doom_d_day" && typeof daysData.value === "number") {
+          newDays = daysData.value;
+        }
+
+        if (dateData.metric === "doom_date" && typeof dateData.value === "string") {
+          // 주차를 날짜로 변환
+          const convertedDate = convertWeekToEndDate(dateData.value);
+          newDateText = convertedDate + "에 끝납니다.";
+        }
+
+        // 캐시 업데이트
+        cachedData = {
+          days: newDays,
+          dateText: newDateText,
+          timestamp: now
+        };
+
+        // 상태 업데이트
+        setRemainingDays(newDays);
+        setTargetDateText(newDateText);
+
+        console.log('데이터 캐시 완료:', { newDays, newDateText });
+      } catch (error) {
+        console.error('API 호출 실패:', error);
+        // 에러 시에도 기본값이 이미 설정되어 있음
+      }
+    };
+
+    // 즉시 실행 (캐시 확인)
+    fetchData();
+    
+    // 1시간마다 데이터 갱신
+    const interval = setInterval(fetchData, CACHE_DURATION);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div style={{ textAlign: "center" }}>
       <div style={{ fontSize: 48, fontWeight: 800, marginBottom: 16 }}>
-        직행의 수명은 <span style={{ fontWeight: 900 }}>{remainingDays}</span>일 남았습니다.
+        직행의 수명은 <span style={{ fontWeight: 900 }}>
+          {remainingDays.toLocaleString()}
+        </span>일 남았습니다.
       </div>
       <div style={{ fontSize: 48, fontWeight: 800 }}>
-        {targetYear}년 {targetMonth}월 {targetDay}일에 끝납니다.
+        {targetDateText}
       </div>
     </div>
   );
