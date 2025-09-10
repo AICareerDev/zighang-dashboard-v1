@@ -12,11 +12,11 @@ export default function HomePage() {
   // 현재 보여줄 페이지 번호 (0: 지원현황, 1: 상세통계, 2: 생명시간)
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
 
-  // 3초마다 다음 페이지로 자동 전환
+  // 7초마다 다음 페이지로 자동 전환
   useEffect(() => {
     const autoSlideTimer = setInterval(() => {
       setCurrentPageIndex((current) => (current + 1) % 3);
-    }, 3000);
+    }, 7000);
 
     return () => clearInterval(autoSlideTimer);
   }, []);
