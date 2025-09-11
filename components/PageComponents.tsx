@@ -200,12 +200,61 @@ export function ApplyOverviewComponent() {
 export function ApplyDetailComponent() {
   // 표 헤더: 각 단계별 항목들
   const tableHeaders = ["홈 화면", "직무별", "채용공고", "지원하기", "합격"];
+
+  // 홈 화면(유니크 유저) 데이터: /api/metrics/uu?event=home_page_view
+  type Block = { current: number; previous: number; wowPct: number | null };
+  type Resp = { event: string; d7: Block; d30: Block };
+  const [home, setHome] = React.useState<Resp | null>(null);
   
-  // 실제 데이터 (현재는 샘플 데이터)
-  const weeklyData = ["47,310", "47,310", "47,310", "47,310", "8"];
-  const weeklyChanges = ["x%", "x%", "x%", "x%", "x%"];
-  const monthlyData = ["47,310", "47,310", "47,310", "47,310", "8"];
-  const monthlyChanges = ["x%", "x%", "x%", "x%", "x%"];
+  // 채용공고(유니크 유저) 데이터: /api/metrics/uu?event=recruitment_page_view
+  const [recruitment, setRecruitment] = React.useState<Resp | null>(null);
+  
+  // 지원하기(유니크 유저) 데이터: /api/metrics/uu?event=recruitment_apply_click
+  const [apply, setApply] = React.useState<Resp | null>(null);
+  
+  // 직무별(유니크 유저) 데이터: /api/metrics/uu?event=job_major_page_view
+  const [jobMajor, setJobMajor] = React.useState<Resp | null>(null);
+  
+  // 합격자수 데이터: 7일/30일 비교 데이터
+  const [hire, setHire] = React.useState<Resp | null>(null);
+
+  React.useEffect(() => {
+    const eventName = "home_page_view"; // 홈 화면 이벤트명
+    fetch(`/api/metrics/uu?event=${encodeURIComponent(eventName)}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then(setHome)
+      .catch(console.error);
+
+    const recruitmentEventName = "recruitment_page_view"; // 채용공고 이벤트명
+    fetch(`/api/metrics/uu?event=${encodeURIComponent(recruitmentEventName)}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then(setRecruitment)
+      .catch(console.error);
+
+    const applyEventName = "recruitment_apply_click"; // 지원하기 이벤트명
+    fetch(`/api/metrics/uu?event=${encodeURIComponent(applyEventName)}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then(setApply)
+      .catch(console.error);
+
+    const jobMajorEventName = "job_major_page_view"; // 직무별 이벤트명
+    fetch(`/api/metrics/uu?event=${encodeURIComponent(jobMajorEventName)}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then(setJobMajor)
+      .catch(console.error);
+
+    // 합격자수 API 호출 (7일/30일 비교 데이터)
+    fetch("/api/metrics/hire", { cache: "no-store" })
+      .then((r) => r.json())
+      .then(setHire)
+      .catch(console.error);
+  }, []);
+
+  // 다른 칸은 임시 값 유지 (추후 같은 API로 교체 가능)
+  const weeklyData = ["-", "47,310", "47,310", "47,310", "8"];
+  const weeklyChanges = ["-", "x%", "x%", "x%", "x%"];
+  const monthlyData = ["-", "47,310", "47,310", "47,310", "8"];
+  const monthlyChanges = ["-", "x%", "x%", "x%", "x%"];
 
   // 표 레이아웃: 첫 번째 열은 라벨용, 나머지 5개 열은 데이터용
   const tableLayout: React.CSSProperties = {
@@ -221,6 +270,8 @@ export function ApplyDetailComponent() {
   const headerStyle: React.CSSProperties = { fontWeight: 800, fontSize: "32px", textAlign: "center" };
   const labelStyle: React.CSSProperties = { fontWeight: 800, fontSize: "32px", textAlign: "center" };
   const dataStyle: React.CSSProperties = { fontSize: "28px", textAlign: "center", fontWeight: 700 };
+  const fmt = (n: number) => n.toLocaleString("ko-KR");
+  const pct = (v: number | null) => (v == null ? "-" : `${v >= 0 ? "+" : ""}${v}%`);
 
   return (
     <div style={tableLayout}>
@@ -232,14 +283,39 @@ export function ApplyDetailComponent() {
 
       {/* 7일 데이터 행 */}
       <div style={labelStyle}>7d</div>
-      {weeklyData.map((value, index) => (
-        <div key={`weekly-${index}`} style={dataStyle}>{value}</div>
+      {/* 7일 데이터: 홈 화면(0번 칸), 직무별(1번 칸), 채용공고(2번 칸), 지원하기(3번 칸) 실데이터 반영 */}
+      {tableHeaders.map((_, index) => (
+        <div key={`weekly-${index}`} style={dataStyle}>
+          {index === 0
+            ? (home ? fmt(home.d7.current) : "-")
+            : index === 1
+            ? (jobMajor ? fmt(jobMajor.d7.current) : "-")
+            : index === 2
+            ? (recruitment ? fmt(recruitment.d7.current) : "-")
+            : index === 3
+            ? (apply ? fmt(apply.d7.current) : "-")
+            : index === 4
+            ? (hire ? fmt(hire.d7.current) : "-")
+            : weeklyData[index]}
+        </div>
       ))}
 
       {/* 7일 변화율 행 */}
       <div style={labelStyle}>증감</div>
-      {weeklyChanges.map((change, index) => (
-        <div key={`weekly-change-${index}`} style={dataStyle}>{change}</div>
+      {tableHeaders.map((_, index) => (
+        <div key={`weekly-change-${index}`} style={dataStyle}>
+          {index === 0
+            ? (home ? pct(home.d7.wowPct) : "-")
+            : index === 1
+            ? (jobMajor ? pct(jobMajor.d7.wowPct) : "-")
+            : index === 2
+            ? (recruitment ? pct(recruitment.d7.wowPct) : "-")
+            : index === 3
+            ? (apply ? pct(apply.d7.wowPct) : "-")
+            : index === 4
+            ? (hire ? pct(hire.d7.wowPct) : "-")
+            : weeklyChanges[index]}
+        </div>
       ))}
 
       {/* 구분선 (시각적 간격) */}
@@ -247,14 +323,38 @@ export function ApplyDetailComponent() {
 
       {/* 30일 데이터 행 */}
       <div style={labelStyle}>30d</div>
-      {monthlyData.map((value, index) => (
-        <div key={`monthly-${index}`} style={dataStyle}>{value}</div>
+      {tableHeaders.map((_, index) => (
+        <div key={`monthly-${index}`} style={dataStyle}>
+          {index === 0
+            ? (home ? fmt(home.d30.current) : "-")
+            : index === 1
+            ? (jobMajor ? fmt(jobMajor.d30.current) : "-")
+            : index === 2
+            ? (recruitment ? fmt(recruitment.d30.current) : "-")
+            : index === 3
+            ? (apply ? fmt(apply.d30.current) : "-")
+            : index === 4
+            ? (hire ? fmt(hire.d30.current) : "-")
+            : monthlyData[index]}
+        </div>
       ))}
 
       {/* 30일 변화율 행 */}
       <div style={labelStyle}>증감</div>
-      {monthlyChanges.map((change, index) => (
-        <div key={`monthly-change-${index}`} style={dataStyle}>{change}</div>
+      {tableHeaders.map((_, index) => (
+        <div key={`monthly-change-${index}`} style={dataStyle}>
+          {index === 0
+            ? (home ? pct(home.d30.wowPct) : "-")
+            : index === 1
+            ? (jobMajor ? pct(jobMajor.d30.wowPct) : "-")
+            : index === 2
+            ? (recruitment ? pct(recruitment.d30.wowPct) : "-")
+            : index === 3
+            ? (apply ? pct(apply.d30.wowPct) : "-")
+            : index === 4
+            ? (hire ? pct(hire.d30.wowPct) : "-")
+            : monthlyChanges[index]}
+        </div>
       ))}
     </div>
   );
