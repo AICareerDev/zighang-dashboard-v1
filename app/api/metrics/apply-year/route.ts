@@ -45,7 +45,7 @@ export async function GET() {
     const json = await res.json();
     // 결과는 보통 [["2025-06-02", 123], ...] 형태 (주차 시작일)
     const rows: Array<[string, number]> =
-      json?.results?.map((r: any) => [r[0], Number(r[1])]) ?? [];
+      json?.results?.map((r: [string, number]) => [r[0], Number(r[1])]) ?? [];
 
     // 2025-06-01부터 현재까지 주별 라벨 생성
     const startDate = new Date('2025-06-01');
