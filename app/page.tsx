@@ -16,7 +16,7 @@ export default function HomePage() {
   useEffect(() => {
     const autoSlideTimer = setInterval(() => {
       setCurrentPageIndex((current) => (current + 1) % 3);
-    }, 7000);
+    }, 11000);
 
     return () => clearInterval(autoSlideTimer);
   }, []);

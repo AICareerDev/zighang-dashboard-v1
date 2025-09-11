@@ -27,34 +27,47 @@ ChartJS.register(
 );
 
 /**
- * 시계열 차트 컴포넌트 - 2025년 지원하기 추이를 보여줌
+ * 시계열 차트 컴포넌트 - 실제 지원하기 월별 추이를 보여줌
  */
 function TimeSeriesChart() {
-  // 더미 데이터: 2025년 1월부터 9월까지
-  const monthLabels = [
-    '2025-01', '2025-02', '2025-03', '2025-04', 
-    '2025-05', '2025-06', '2025-07', '2025-08', '2025-09'
-  ];
+  const [chartData, setChartData] = React.useState<{
+    labels: string[];
+    datasets: Array<{
+      label: string;
+      data: number[];
+      borderColor: string;
+      backgroundColor: string;
+      borderWidth: number;
+      pointRadius: number;
+      pointBackgroundColor: string;
+      fill: boolean;
+      tension: number;
+    }>;
+  } | null>(null);
 
-  // 지원하기 유저 수 더미 데이터 (점진적으로 증가하는 추세)
-  const applyUserData = [3200, 3800, 4100, 3900, 4500, 5200, 4800, 5600, 6200];
-
-  const chartData = {
-    labels: monthLabels,
-    datasets: [
-      {
-        label: '월간 지원하기 유저',
-        data: applyUserData,
-        borderColor: 'rgb(59, 130, 246)', // 파란색
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        borderWidth: 3,
-        pointRadius: 6,
-        pointBackgroundColor: 'rgb(59, 130, 246)',
-        fill: true,
-        tension: 0.4, // 부드러운 곡선
-      },
-    ],
-  };
+  React.useEffect(() => {
+    fetch("/api/metrics/apply-year")
+      .then((r) => r.json())
+      .then((response: { labels: string[]; data: number[] }) => {
+        setChartData({
+          labels: response.labels,
+          datasets: [
+            {
+              label: '월간 지원하기 유저',
+              data: response.data,
+              borderColor: 'rgb(59, 130, 246)', // 파란색
+              backgroundColor: 'rgba(59, 130, 246, 0.1)',
+              borderWidth: 3,
+              pointRadius: 6,
+              pointBackgroundColor: 'rgb(59, 130, 246)',
+              fill: true,
+              tension: 0.4, // 부드러운 곡선
+            },
+          ],
+        });
+      })
+      .catch(console.error);
+  }, []);
 
   const chartOptions = {
     responsive: true,
@@ -94,6 +107,14 @@ function TimeSeriesChart() {
     },
   };
 
+  if (!chartData) {
+    return (
+      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p style={{ color: 'white' }}>로딩...</p>
+      </div>
+    );
+  }
+
   return (
     <div style={{ width: '100%', height: '100%' }}>
       <Line data={chartData} options={chartOptions} />
@@ -105,17 +126,62 @@ function TimeSeriesChart() {
  * 지원하기 현황 페이지 - 7일/30일 통계와 차트 영역
  */
 export function ApplyOverviewComponent() {
+  const [applyData30d, setApplyData30d] = React.useState<{
+    current_30d: number;
+    previous_30d: number; 
+    wow_pct: number | null;
+  } | null>(null);
+
+  const [applyData7d, setApplyData7d] = React.useState<{
+    current_7d: number;
+    previous_7d: number;
+    wow_pct: number | null;
+  } | null>(null);
+
+  React.useEffect(() => {
+    // 30일 데이터
+    fetch("/api/metrics/apply-30d")
+      .then((r) => r.json())
+      .then(setApplyData30d)
+      .catch(console.error);
+
+    // 7일 데이터
+    fetch("/api/metrics/apply-7d")
+      .then((r) => r.json())
+      .then(setApplyData7d)
+      .catch(console.error);
+  }, []);
+
+  const formatPercentage = (pct: number | null) => {
+    if (pct === null) return "-";
+    const sign = pct >= 0 ? "+" : "";
+    return `${sign}${pct}%`;
+  };
+
+  const getPercentageColor = (pct: number | null) => {
+    if (pct === null) return "white";
+    return pct >= 0 ? "red" : "rgb(59, 130, 246)"; // +면 빨간색, -면 파란색
+  };
+
   return (
     <div style={{ width: "92%", maxWidth: 1200, display: "flex", gap: 64, alignItems: "stretch" }}>
       <section style={{ flex: 1, display: "flex", flexDirection: "column", gap: 32, justifyContent: "center" }}>
         <h2 style={{ fontSize: "36px", fontWeight: "800", textAlign: "center", marginBottom: "16px" }}>지원하기 7/30일 추이</h2>
         <div>
-          <p style={{ fontSize: "36px", margin: "0" }}>직행의 7일 지원하기 유저는 <br/>{'{'}$value{'}'} 명입니다.</p>
-          <p style={{ fontSize: "36px", margin: "0" }}>지난 주 대비 <span style={{ color: "red" }}>x%</span> 변화했습니다.</p>
+          <p style={{ fontSize: "36px", margin: "0" }}>직행의 7일 지원하기 유저는 <br/>
+            <strong>{applyData7d ? applyData7d.current_7d.toLocaleString("ko-KR") : "-"}</strong> 명입니다.
+          </p>
+          <p style={{ fontSize: "36px", margin: "0" }}>지난 주 대비 <span style={{ color: getPercentageColor(applyData7d?.wow_pct ?? null) }}>
+            {applyData7d ? formatPercentage(applyData7d.wow_pct) : "-%"}
+          </span> 변화했습니다.</p>
         </div>
         <div>
-          <p style={{ fontSize: "36px", margin: "0" }}>직행의 30일 지원하기 유저는 <br/>{'{'}$value{'}'} 명입니다.</p>
-          <p style={{ fontSize: "36px", margin: "0" }}>지난 주 대비 <span style={{ color: "rgb(59, 130, 246)" }}>y%</span> 변화했습니다.</p>
+          <p style={{ fontSize: "36px", margin: "0" }}>직행의 30일 지원하기 유저는 <br/>
+            <strong>{applyData30d ? applyData30d.current_30d.toLocaleString("ko-KR") : "-"}</strong> 명입니다.
+          </p>
+          <p style={{ fontSize: "36px", margin: "0" }}>전기간 대비 <span style={{ color: getPercentageColor(applyData30d?.wow_pct ?? null) }}>
+            {applyData30d ? formatPercentage(applyData30d.wow_pct) : "-%"}
+          </span> 변화했습니다.</p>
         </div>
       </section>
       <section style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
