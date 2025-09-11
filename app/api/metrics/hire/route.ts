@@ -73,6 +73,8 @@ export async function GET() {
         previous: previous30d,
         wowPct: calculateWowPct(current30d, previous30d)
       }
+    }, {
+      headers: { "Cache-Control": "s-maxage=300, stale-while-revalidate=600" }
     });
 
   } catch (error) {

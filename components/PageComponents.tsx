@@ -272,6 +272,10 @@ export function ApplyDetailComponent() {
   const dataStyle: React.CSSProperties = { fontSize: "28px", textAlign: "center", fontWeight: 700 };
   const fmt = (n: number) => n.toLocaleString("ko-KR");
   const pct = (v: number | null) => (v == null ? "-" : `${v >= 0 ? "+" : ""}${v}%`);
+  const getPercentageColor = (pct: number | null) => {
+    if (pct === null) return "white";
+    return pct >= 0 ? "red" : "rgb(59, 130, 246)"; // +면 빨간색, -면 파란색
+  };
 
   return (
     <div style={tableLayout}>
@@ -303,7 +307,20 @@ export function ApplyDetailComponent() {
       {/* 7일 변화율 행 */}
       <div style={labelStyle}>증감</div>
       {tableHeaders.map((_, index) => (
-        <div key={`weekly-change-${index}`} style={dataStyle}>
+        <div key={`weekly-change-${index}`} style={{
+          ...dataStyle,
+          color: index === 0
+            ? getPercentageColor(home?.d7.wowPct ?? null)
+            : index === 1
+            ? getPercentageColor(jobMajor?.d7.wowPct ?? null)
+            : index === 2
+            ? getPercentageColor(recruitment?.d7.wowPct ?? null)
+            : index === 3
+            ? getPercentageColor(apply?.d7.wowPct ?? null)
+            : index === 4
+            ? getPercentageColor(hire?.d7.wowPct ?? null)
+            : "white"
+        }}>
           {index === 0
             ? (home ? pct(home.d7.wowPct) : "-")
             : index === 1
@@ -342,7 +359,20 @@ export function ApplyDetailComponent() {
       {/* 30일 변화율 행 */}
       <div style={labelStyle}>증감</div>
       {tableHeaders.map((_, index) => (
-        <div key={`monthly-change-${index}`} style={dataStyle}>
+        <div key={`monthly-change-${index}`} style={{
+          ...dataStyle,
+          color: index === 0
+            ? getPercentageColor(home?.d30.wowPct ?? null)
+            : index === 1
+            ? getPercentageColor(jobMajor?.d30.wowPct ?? null)
+            : index === 2
+            ? getPercentageColor(recruitment?.d30.wowPct ?? null)
+            : index === 3
+            ? getPercentageColor(apply?.d30.wowPct ?? null)
+            : index === 4
+            ? getPercentageColor(hire?.d30.wowPct ?? null)
+            : "white"
+        }}>
           {index === 0
             ? (home ? pct(home.d30.wowPct) : "-")
             : index === 1
@@ -364,33 +394,6 @@ export function ApplyDetailComponent() {
 let cachedData: { days: number; dateText: string; timestamp: number } | null = null;
 const CACHE_DURATION = 60 * 60 * 1000; // 1시간
 
-/**
- * 주차를 해당 주차의 마지막 날짜로 변환
- * 예: "2026년 5월 3주차" → "2026년 5월 21일"
- */
-function convertWeekToEndDate(weekText: string): string {
-  const match = weekText.match(/(\d{4})년 (\d{1,2})월 (\d{1,2})주차/);
-  if (!match) return weekText;
-
-  const year = parseInt(match[1]);
-  const month = parseInt(match[2]);
-  const week = parseInt(match[3]);
-
-  // 해당 월의 첫 번째 날
-  const firstDay = new Date(year, month - 1, 1);
-  
-  // 첫 번째 주의 시작일 (월요일 기준)
-  const firstMonday = new Date(firstDay);
-  const dayOfWeek = firstDay.getDay();
-  const daysToMonday = dayOfWeek === 0 ? 1 : 8 - dayOfWeek; // 일요일이면 1일, 아니면 8-요일
-  firstMonday.setDate(firstDay.getDate() + daysToMonday);
-
-  // 해당 주차의 마지막 날 (일요일)
-  const targetWeekEnd = new Date(firstMonday);
-  targetWeekEnd.setDate(firstMonday.getDate() + (week - 1) * 7 + 6);
-
-  return `${targetWeekEnd.getFullYear()}년 ${targetWeekEnd.getMonth() + 1}월 ${targetWeekEnd.getDate()}일`;
-}
 
 /**
  * 생명시간 카운트다운 - API에서 실제 데이터를 가져와서 보여줌 (캐시 적용)
@@ -413,63 +416,27 @@ export function LifeTimeComponent() {
       try {
         console.log('API 호출 시작...');
         
-        // 타임아웃 설정 (15초, 리다이렉트 허용)
-        const fetchWithTimeout = (url: string) => {
-          return Promise.race([
-            fetch(url, {
-              method: 'GET',
-              redirect: 'follow',
-              headers: { 'Accept': 'application/json' }
-            }),
-            new Promise<never>((_, reject) => 
-              setTimeout(() => reject(new Error('타임아웃')), 15000)
-            )
-          ]);
-        };
-
-        // 두 API를 동시에 호출
-        const [daysResponse, dateResponse] = await Promise.all([
-          fetchWithTimeout('https://script.google.com/macros/s/AKfycbzMmyQR0J0cf57U21XbUIsFUuGSR-K3euip9fIFXpiDjTfegHIP6geTmEO134XAC8Qc/exec'),
-          fetchWithTimeout('https://script.google.com/macros/s/AKfycbxq9Uy5BFq3UxnVSMrU5ZLP9mJLX9XRLK_h2R2CEUSA9DvaksJ9MX6hebbRbWeoWnqG/exec')
-        ]);
-
-        console.log('API 응답 상태:', daysResponse.status, dateResponse.status);
-
-        if (!daysResponse.ok || !dateResponse.ok) {
+        const response = await fetch('/api/metrics/lifetime', { cache: "no-store" });
+        
+        if (!response.ok) {
           throw new Error('API 응답 오류');
         }
 
-        const daysData = await daysResponse.json();
-        const dateData = await dateResponse.json();
-
-        console.log('받은 데이터:', { daysData, dateData });
-
-        let newDays = 247;
-        let newDateText = "2026년 5월 21일에 끝납니다.";
-
-        // API 응답에서 값 추출
-        if (daysData.metric === "doom_d_day" && typeof daysData.value === "number") {
-          newDays = daysData.value;
-        }
-
-        if (dateData.metric === "doom_date" && typeof dateData.value === "string") {
-          // 주차를 날짜로 변환
-          const convertedDate = convertWeekToEndDate(dateData.value);
-          newDateText = convertedDate + "에 끝납니다.";
-        }
+        const data = await response.json();
+        console.log('받은 데이터:', data);
 
         // 캐시 업데이트
         cachedData = {
-          days: newDays,
-          dateText: newDateText,
+          days: data.days,
+          dateText: data.dateText,
           timestamp: now
         };
 
         // 상태 업데이트
-        setRemainingDays(newDays);
-        setTargetDateText(newDateText);
+        setRemainingDays(data.days);
+        setTargetDateText(data.dateText);
 
-        console.log('데이터 캐시 완료:', { newDays, newDateText });
+        console.log('데이터 캐시 완료:', data);
       } catch (error) {
         console.error('API 호출 실패:', error);
         // 에러 시에도 기본값이 이미 설정되어 있음
