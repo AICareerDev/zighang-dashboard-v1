@@ -199,7 +199,7 @@ export function ApplyOverviewComponent() {
  */
 export function ApplyDetailComponent() {
   // 표 헤더: 각 단계별 항목들
-  const tableHeaders = ["홈 화면", "직무별", "채용공고", "지원하기", "합격"];
+  const tableHeaders = ["홈 화면", "전체공고", "채용공고", "지원하기", "합격"];
 
   // 홈 화면(유니크 유저) 데이터: /api/metrics/uu?event=home_page_view
   type Block = { current: number; previous: number; wowPct: number | null };
